@@ -1,10 +1,7 @@
-import math
 import os
 import time
-import statistics
 from cmath import isnan
 from functools import reduce
-from locale import windows_locale
 
 version = 1.0
 
