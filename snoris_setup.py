@@ -54,7 +54,7 @@ def main():
                         "baseline": measured_temp,
                     })
         except OSError:
-            print(f"   - Skipping {device}, could not read.")
+            print(f" - Skipping {device}, could not read.")
 
     print("\n🌬️ Step 2: Calibrating fans")
 
@@ -71,7 +71,7 @@ def main():
             if has_pwm and has_rpm:
                 print("   - It's a fan! Setting speed to maximum & waiting 60s to stabilize")
                 writeInline(pwm_path, "255")
-                time.sleep(60)
+                time.sleep(int(os.getenv("SNORIS_FAN_WAIT", "60")))
 
                 rpm_measurements = []
                 print("   - Measuring fan variability")
@@ -80,6 +80,8 @@ def main():
                     if not isnan(current_rpm) and current_rpm > 0:
                         rpm_measurements.append(current_rpm)
                     time.sleep(0.1)
+                if len(rpm_measurements) == 0:
+                    raise OSError("Not a fan.")
                 rpm_range = (max(rpm_measurements) - min(rpm_measurements)) * 2
                 print(f"   - {rpm_range} normal RPM variation (2 * range)")
                 rpm_measurements = rpm_measurements[window:] # for testing variation later on
@@ -110,7 +112,7 @@ def main():
                         print(f"     - Found new speed {pwm_value} spins at {current_rpm}RPM")
                         all_speeds.append(current_rpm)
         except OSError:
-            print(f"   - Skipping {device}, could not read.")
+            print(f" - Skipping {device}, could not read.")
 
 if __name__ == "__main__":
     main()
