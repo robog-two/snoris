@@ -1,18 +1,17 @@
 import os
+import statistics
 import time
 from cmath import isnan
 from functools import reduce
 import json
+import platform
 
 version = 1.0
 
 temp_sensors = []
 fans = []
 
-window = 10 # 1 second to measure fan variation
-
-print(f"Snoris Setup v{version} 💤")
-print("This script may need root permissions to set fan values.\n")
+measurements_in_window = 10 # 1 second to measure fan variation
 
 def ds(a, b):
     return abs(a - b)
@@ -27,7 +26,13 @@ def writeInline(path: str, content: str) -> None:
     with open(path, "w") as f:
         f.write(content)
 
-def changeFan(pwm_path, rpm_path, three_sem, rpm_measurements, speed):
+def pwm_rpm_tuple(pwm, rpm):
+    return {
+        "pwm": pwm,
+        "expected_rpm": rpm,
+    }
+
+def changeFan(pwm_path, rpm_path, rpm_range, rpm_measurements, speed):
     i = 0
     writeInline(pwm_path, str(speed))
     while True:  # wait for fan to stabilize according to our data
@@ -35,11 +40,28 @@ def changeFan(pwm_path, rpm_path, three_sem, rpm_measurements, speed):
         time.sleep(0.1)
         rpm_measurements.append(int(readInline(rpm_path)))
         rpm_measurements.pop(0)
-        if round(max(rpm_measurements) - min(rpm_measurements), 2) <= three_sem and i > window:
-            # Break if the range is within 99% of fan variation
+        avg_rpm = statistics.mean(rpm_measurements)
+        # If the lowest and highest values are less than rpm_range from the mean,
+        # Then this fan is at a stable speed. (if we have actually measured enough data)
+        if ds(min(rpm_measurements), avg_rpm) < rpm_range and ds(max(rpm_measurements), avg_rpm) < rpm_range and i >= measurements_in_window:
             break
 
 def main():
+    print(f"Snoris Setup v{version} 💤")
+
+    # Check for priveleges and that we are on a Linux system - not good to write to these files on a Mac!
+    if platform.system() != "Linux":
+        print("⛔️ Snoris is a fan controller for Linux systems only.")
+        exit(1)
+
+    if os.geteuid() != 0:
+        print("⛔️ Snoris needs root priveleges. It uses this to do the following:")
+        print(" - Change fan speeds by writing to PWM device files in /sys for calibration")
+        print(" - Install systemd services that manage fan speeds based on temperature")
+        print("If you are unsure whether Snoris is safe to run on your system, feel free to")
+        print("check the source code yourself. Please submit any concerns as GitHub issues/PRs.")
+        exit(1)
+
     print("🌡 Step 1: Collecting Temperature Sensors (try lm_sensors if these are missing items)")
 
     for device in os.listdir("/sys/class/hwmon"):
@@ -49,11 +71,14 @@ def main():
                 if sensor.startswith("temp") and sensor.endswith("_input"):
                     # This is a temperature sensor!
                     measured_temp = int(readInline(f"/sys/class/hwmon/{device}/{sensor}")) / 1000
-                    print(f"   - Sensor at {sensor} reads {measured_temp} °C")
-                    temp_sensors.append({
-                        "path": f"/sys/class/hwmon/{device}/{sensor}",
-                        "baseline": measured_temp,
-                    })
+                    if measured_temp == 0:
+                        print(f"   - ⚠️ Sensor {sensor} reads 0 °C so is likely misconfigured. Ignoring this sensor.")
+                    else:
+                        print(f"   - Sensor at {sensor} reads {measured_temp} °C")
+                        temp_sensors.append({
+                            "path": f"/sys/class/hwmon/{device}/{sensor}",
+                            "baseline": measured_temp,
+                        })
         except OSError:
             print(f" - Skipping {device}, could not read.")
 
@@ -69,6 +94,8 @@ def main():
             has_pwm = os.path.exists(pwm_path)
             has_rpm = os.path.exists(rpm_path)
 
+            pwm_to_rpm = []
+
             if has_pwm and has_rpm:
                 print("   - It's a fan! Setting speed to maximum & waiting 60s to stabilize")
                 writeInline(pwm_path, "255")
@@ -82,46 +109,51 @@ def main():
                         rpm_measurements.append(current_rpm)
                     time.sleep(0.1)
                 if len(rpm_measurements) == 0:
+                    print("   - ⚠️ Trouble calibrating fan. Make sure you have proper kernel modules. Try using lm_sensors to fix.")
                     raise OSError("Not a fan.")
                 rpm_range = ((max(rpm_measurements) - min(rpm_measurements)) + 5) * 2
                 print(f"   - {rpm_range} normal RPM variation (2 * range)")
-                rpm_measurements = rpm_measurements[window:] # for testing variation later on
+                rpm_measurements = rpm_measurements[measurements_in_window:] # for testing variation later on
 
                 print(f"   - Going to lowest setting")
                 changeFan(pwm_path, rpm_path, rpm_range, rpm_measurements, 0)
 
-                lowest_rpms = int(readInline(rpm_path))
-                print(f"     - Lowest setting is {lowest_rpms}RPM")
+                current_rpm = int(readInline(rpm_path))
+                pwm_to_rpm.append(pwm_rpm_tuple(0, current_rpm))
+                print(f"     - Lowest setting is {current_rpm}RPM")
 
                 print(f"   - Going to highest setting")
                 spin_up_start = time.time()
                 changeFan(pwm_path, rpm_path, rpm_range, rpm_measurements, 255)
-                spin_up_time = round(time.time() - spin_up_start, 2) - (window / 10)
-                highest_rpms = int(readInline(rpm_path))
+                spin_up_time = round(time.time() - spin_up_start, 2) - (measurements_in_window / 10)
 
-                print(f"     - Fan took {spin_up_time}s to spin up, reached {highest_rpms}RPM")
+                current_rpm = int(readInline(rpm_path))
+                pwm_to_rpm.append(pwm_rpm_tuple(255, current_rpm))
+                print(f"     - Fan took {spin_up_time}s to spin up, reached {current_rpm}RPM")
 
                 print("   - Checking intermediate speeds")
-                all_speeds = [lowest_rpms, highest_rpms]
-                all_pwms = []
                 for i in range(1, 5):
                     pwm_value = i * 50
                     writeInline(pwm_path, str(pwm_value))
                     time.sleep(spin_up_time)
                     current_rpm = int(readInline(rpm_path))
-                    is_new = reduce(lambda acc, el: ds(el, current_rpm) > rpm_range and acc, all_speeds, True)
+                    is_new = reduce(lambda acc, el: ds(el["expected_rpm"], current_rpm) > rpm_range and acc, pwm_to_rpm, True)
                     if is_new:
                         print(f"     - Found new speed {pwm_value} spins at {current_rpm}RPM")
-                        all_speeds.append(current_rpm)
-                        all_pwms.append(pwm_value)
+                        pwm_to_rpm.append(pwm_rpm_tuple(pwm_value, current_rpm))
                 fans.append({
                     "pwm_path": pwm_path,
                     "rpm_path": rpm_path,
                     "rpm_range": rpm_range,
-                    "valid_pwm_settings": [0, *all_pwms , 255],
+                    "pwm_to_rpm": pwm_to_rpm,
                 })
         except OSError:
-            print(f" - Skipping {device}, could not read.")
+            print(f" - ⚠️ Skipping {device}, could not read.")
+
+    if len(fans) == 0:
+        print("⛔️ Aborting setup. No fans calibrated successfully. Snoris will not do anything on your system.")
+    if len(temp_sensors) == 0:
+        print("⛔️ Aborting setup. No temperature sensors were found. Snoris will not do anything on your system.")
 
     os.makedirs("/etc/snoris/", exist_ok=True)
     with open("/etc/snoris/snoris_calibration.json", "w") as calibration_file:
