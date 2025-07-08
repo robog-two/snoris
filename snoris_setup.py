@@ -2,6 +2,7 @@ import os
 import time
 from cmath import isnan
 from functools import reduce
+import json
 
 version = 1.0
 
@@ -82,7 +83,7 @@ def main():
                     time.sleep(0.1)
                 if len(rpm_measurements) == 0:
                     raise OSError("Not a fan.")
-                rpm_range = (max(rpm_measurements) - min(rpm_measurements)) * 2
+                rpm_range = ((max(rpm_measurements) - min(rpm_measurements)) + 5) * 2
                 print(f"   - {rpm_range} normal RPM variation (2 * range)")
                 rpm_measurements = rpm_measurements[window:] # for testing variation later on
 
@@ -102,6 +103,7 @@ def main():
 
                 print("   - Checking intermediate speeds")
                 all_speeds = [lowest_rpms, highest_rpms]
+                all_pwms = []
                 for i in range(1, 5):
                     pwm_value = i * 50
                     writeInline(pwm_path, str(pwm_value))
@@ -111,8 +113,24 @@ def main():
                     if is_new:
                         print(f"     - Found new speed {pwm_value} spins at {current_rpm}RPM")
                         all_speeds.append(current_rpm)
+                        all_pwms.append(pwm_value)
+                fans.append({
+                    "pwm_path": pwm_path,
+                    "rpm_path": rpm_path,
+                    "rpm_range": rpm_range,
+                    "valid_pwm_settings": [0, *all_pwms , 255],
+                })
         except OSError:
             print(f" - Skipping {device}, could not read.")
+
+    os.makedirs("/etc/snoris/", exist_ok=True)
+    with open("/etc/snoris/snoris_calibration.json", "w") as calibration_file:
+        json.dump({
+            "temp_sensors": temp_sensors,
+            "fans": fans,
+        }, calibration_file)
+        print("📬 Wrote to calibration file")
+
 
 if __name__ == "__main__":
     main()
