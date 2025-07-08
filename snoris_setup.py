@@ -45,6 +45,7 @@ def changeFan(pwm_path, rpm_path, rpm_range, rpm_measurements, speed):
         # Then this fan is at a stable speed. (if we have actually measured enough data)
         if ds(min(rpm_measurements), avg_rpm) < rpm_range and ds(max(rpm_measurements), avg_rpm) < rpm_range and i >= measurements_in_window:
             break
+    return round(statistics.mean(rpm_measurements))
 
 def main():
     print(f"Snoris Setup v{version} 💤")
@@ -70,9 +71,9 @@ def main():
             for sensor in os.listdir("/sys/class/hwmon/" + device):
                 if sensor.startswith("temp") and sensor.endswith("_input"):
                     # This is a temperature sensor!
-                    measured_temp = int(readInline(f"/sys/class/hwmon/{device}/{sensor}")) / 1000
-                    if measured_temp == 0:
-                        print(f"   - ⚠️ Sensor {sensor} reads 0 °C so is likely misconfigured. Ignoring this sensor.")
+                    measured_temp = round(int(readInline(f"/sys/class/hwmon/{device}/{sensor}")) / 1000)
+                    if measured_temp <= 0:
+                        print(f"   - ⚠️ Sensor {sensor} reads freezing so is likely misconfigured. Ignoring this sensor.")
                     else:
                         print(f"   - Sensor at {sensor} reads {measured_temp} °C")
                         temp_sensors.append({
@@ -97,9 +98,10 @@ def main():
             pwm_to_rpm = []
 
             if has_pwm and has_rpm:
-                print("   - It's a fan! Setting speed to maximum & waiting 60s to stabilize")
+                wait_time = int(os.getenv("SNORIS_FAN_WAIT", "60"))
+                print(f"   - It's a fan! Setting speed to maximum & waiting {wait_time}s to stabilize")
                 writeInline(pwm_path, "255")
-                time.sleep(int(os.getenv("SNORIS_FAN_WAIT", "60")))
+                time.sleep(wait_time)
 
                 rpm_measurements = []
                 print("   - Measuring fan variability")
@@ -115,32 +117,27 @@ def main():
                 print(f"   - {rpm_range} normal RPM variation (2 * range)")
                 rpm_measurements = rpm_measurements[measurements_in_window:] # for testing variation later on
 
-                print(f"   - Going to lowest setting")
-                changeFan(pwm_path, rpm_path, rpm_range, rpm_measurements, 0)
-
                 current_rpm = int(readInline(rpm_path))
+                pwm_to_rpm.append(pwm_rpm_tuple(255, current_rpm))
+                print(f"   - Highest setting is {current_rpm}RPM")
+
+                print(f"   - Going to lowest setting")
+                current_rpm = changeFan(pwm_path, rpm_path, rpm_range, rpm_measurements, 0)
                 pwm_to_rpm.append(pwm_rpm_tuple(0, current_rpm))
                 print(f"     - Lowest setting is {current_rpm}RPM")
 
-                print(f"   - Going to highest setting")
-                spin_up_start = time.time()
-                changeFan(pwm_path, rpm_path, rpm_range, rpm_measurements, 255)
-                spin_up_time = round(time.time() - spin_up_start, 2) - (measurements_in_window / 10)
-
-                current_rpm = int(readInline(rpm_path))
-                pwm_to_rpm.append(pwm_rpm_tuple(255, current_rpm))
-                print(f"     - Fan took {spin_up_time}s to spin up, reached {current_rpm}RPM")
-
                 print("   - Checking intermediate speeds")
                 for i in range(1, 5):
+                    # Change fan to this PWM value
                     pwm_value = i * 50
-                    writeInline(pwm_path, str(pwm_value))
-                    time.sleep(spin_up_time)
-                    current_rpm = int(readInline(rpm_path))
+                    current_rpm = changeFan(pwm_path, rpm_path, rpm_range, rpm_measurements, pwm_value)
+
                     is_new = reduce(lambda acc, el: ds(el["expected_rpm"], current_rpm) > rpm_range and acc, pwm_to_rpm, True)
                     if is_new:
                         print(f"     - Found new speed {pwm_value} spins at {current_rpm}RPM")
                         pwm_to_rpm.append(pwm_rpm_tuple(pwm_value, current_rpm))
+
+                pwm_to_rpm.sort(key=lambda dict: dict["pwm"]) # sort by slowest to highest settings
                 fans.append({
                     "pwm_path": pwm_path,
                     "rpm_path": rpm_path,
@@ -160,8 +157,8 @@ def main():
         json.dump({
             "temp_sensors": temp_sensors,
             "fans": fans,
-        }, calibration_file)
-        print("📬 Wrote to calibration file")
+        }, calibration_file, indent=4)
+        print("📬 Wrote calibration to file")
 
 
 if __name__ == "__main__":
