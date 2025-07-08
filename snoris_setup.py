@@ -1,20 +1,23 @@
+import json
 import os
+import platform
 import statistics
 import time
 from cmath import isnan
 from functools import reduce
-import json
-import platform
 
-version = 1.0
+version = 1.0 # be sure to update this in other files. Can't be extracted since they need to be independent of each other.
 
 temp_sensors = []
-fans = []
+fan_calibration = []
+user_options = {}
 
-measurements_in_window = 10 # 1 second to measure fan variation
+measurements_in_window = 10  # 1 second to measure fan variation
+
 
 def ds(a, b):
     return abs(a - b)
+
 
 def readInline(path: str) -> str:
     content = ""
@@ -22,15 +25,18 @@ def readInline(path: str) -> str:
         content = f.read()
     return content
 
+
 def writeInline(path: str, content: str) -> None:
     with open(path, "w") as f:
         f.write(content)
+
 
 def pwm_rpm_tuple(pwm, rpm):
     return {
         "pwm": pwm,
         "expected_rpm": rpm,
     }
+
 
 def changeFan(pwm_path, rpm_path, rpm_range, rpm_measurements, speed):
     i = 0
@@ -43,9 +49,11 @@ def changeFan(pwm_path, rpm_path, rpm_range, rpm_measurements, speed):
         avg_rpm = statistics.mean(rpm_measurements)
         # If the lowest and highest values are less than rpm_range from the mean,
         # Then this fan is at a stable speed. (if we have actually measured enough data)
-        if ds(min(rpm_measurements), avg_rpm) < rpm_range and ds(max(rpm_measurements), avg_rpm) < rpm_range and i >= measurements_in_window:
+        if ds(min(rpm_measurements), avg_rpm) < rpm_range and ds(max(rpm_measurements),
+                                                                 avg_rpm) < rpm_range and i >= measurements_in_window:
             break
     return round(statistics.mean(rpm_measurements))
+
 
 def main():
     print(f"Snoris Setup v{version} 💤")
@@ -63,7 +71,12 @@ def main():
         print("check the source code yourself. Please submit any concerns as GitHub issues/PRs.")
         exit(1)
 
-    print("🌡 Step 1: Collecting Temperature Sensors (try lm_sensors if these are missing items)")
+    print("\nYour system should not be under heavy load so we can get a baseline temperature.")
+    if not input("Is now a good time to read a baseline temperature? [y/N]").lower().startswith("y"):
+        print("⛔️ User reports not ready to read a baseline temperature.")
+        exit(0)
+
+    print("\n🌡 Collecting Temperature Sensors (try lm_sensors if these are missing items)")
 
     for device in os.listdir("/sys/class/hwmon"):
         try:
@@ -73,9 +86,10 @@ def main():
                     # This is a temperature sensor!
                     measured_temp = round(int(readInline(f"/sys/class/hwmon/{device}/{sensor}")) / 1000)
                     if measured_temp <= 0:
-                        print(f"   - ⚠️ Sensor {sensor} reads freezing so is likely misconfigured. Ignoring this sensor.")
+                        print(
+                            f"   - ⚠️ Sensor {sensor} reads freezing so is likely misconfigured. Ignoring this sensor.")
                     else:
-                        print(f"   - Sensor at {sensor} reads {measured_temp} °C")
+                        print(f"   - Sensor at {sensor} reads {measured_temp}°C")
                         temp_sensors.append({
                             "path": f"/sys/class/hwmon/{device}/{sensor}",
                             "baseline": measured_temp,
@@ -83,7 +97,32 @@ def main():
         except OSError:
             print(f" - Skipping {device}, could not read.")
 
-    print("\n🌬️ Step 2: Calibrating fans")
+    hottest_temp = max(list(map(lambda it: it["baseline"], temp_sensors)))
+    print(f"\nYour highest baseline temperature was {hottest_temp}°C")
+    value = round(int(input(
+        "How many degrees may the temperature *increase* before Snoris sets fans to their maximum speed? [30]") or 20))
+    print(f"OK. For example, fans will be highest when this component reaches {hottest_temp + value}°C")
+    user_options["degrees_til_max_fan"] = value
+
+    print("\nMost components have a critical temperature of ~100°C, but you should "
+          "check your device or processor manufacturer's website.")
+    value = round(int(input(
+        "When should your system power down during a cooling failure? [85]") or 85))
+    print(f"OK. System will power down at {value}°C.")
+    user_options["degrees_power_down"] = value
+
+    user_options["install_automatically"] = True
+    if (input("\nDo you want Snoris to setup its system services automatically (works best for most users)? [Y/n]")
+            .lower()
+            .startswith("n")):
+        print("OK. Snoris will not mess with your systemd configuration.")
+        user_options["install_automatically"] = False
+
+    if user_options["install_automatically"]:
+        print("\nThe fan calibration process requires no interaction and will take a few minutes.")
+        time.sleep(5)
+
+    print("\n🌬️ Calibrating fans")
 
     for device in os.listdir("/sys/class/hwmon"):
         try:
@@ -111,11 +150,12 @@ def main():
                         rpm_measurements.append(current_rpm)
                     time.sleep(0.1)
                 if len(rpm_measurements) == 0:
-                    print("   - ⚠️ Trouble calibrating fan. Make sure you have proper kernel modules. Try using lm_sensors to fix.")
+                    print(
+                        "   - ⚠️ Trouble calibrating fan. Make sure you have proper kernel modules. Try using lm_sensors to fix.")
                     raise OSError("Not a fan.")
                 rpm_range = ((max(rpm_measurements) - min(rpm_measurements)) + 5) * 2
                 print(f"   - {rpm_range} normal RPM variation (2 * range)")
-                rpm_measurements = rpm_measurements[measurements_in_window:] # for testing variation later on
+                rpm_measurements = rpm_measurements[measurements_in_window:]  # for testing variation later on
 
                 current_rpm = int(readInline(rpm_path))
                 pwm_to_rpm.append(pwm_rpm_tuple(255, current_rpm))
@@ -132,13 +172,14 @@ def main():
                     pwm_value = i * 50
                     current_rpm = changeFan(pwm_path, rpm_path, rpm_range, rpm_measurements, pwm_value)
 
-                    is_new = reduce(lambda acc, el: ds(el["expected_rpm"], current_rpm) > rpm_range and acc, pwm_to_rpm, True)
+                    is_new = reduce(lambda acc, el: ds(el["expected_rpm"], current_rpm) > rpm_range and acc, pwm_to_rpm,
+                                    True)
                     if is_new:
                         print(f"     - Found new speed {pwm_value} spins at {current_rpm}RPM")
                         pwm_to_rpm.append(pwm_rpm_tuple(pwm_value, current_rpm))
 
-                pwm_to_rpm.sort(key=lambda dict: dict["pwm"]) # sort by slowest to highest settings
-                fans.append({
+                pwm_to_rpm.sort(key=lambda dict: dict["pwm"])  # sort by slowest to highest settings
+                fan_calibration.append({
                     "pwm_path": pwm_path,
                     "rpm_path": rpm_path,
                     "rpm_range": rpm_range,
@@ -147,18 +188,24 @@ def main():
         except OSError:
             print(f" - ⚠️ Skipping {device}, could not read.")
 
-    if len(fans) == 0:
+    if len(fan_calibration) == 0:
         print("⛔️ Aborting setup. No fans calibrated successfully. Snoris will not do anything on your system.")
     if len(temp_sensors) == 0:
         print("⛔️ Aborting setup. No temperature sensors were found. Snoris will not do anything on your system.")
 
-    os.makedirs("/etc/snoris/", exist_ok=True)
-    with open("/etc/snoris/snoris_calibration.json", "w") as calibration_file:
+    save_path = "./config.json"
+    if user_options["install_automatically"]:
+        os.makedirs("/etc/snoris/", exist_ok=True)
+        save_path = "/etc/snoris/config.json"
+
+    with open(save_path, "w") as calibration_file:
         json.dump({
+            "config_version": version,
+            "user_options": user_options,
             "temp_sensors": temp_sensors,
-            "fans": fans,
+            "fan_calibration": fan_calibration,
         }, calibration_file, indent=4)
-        print("📬 Wrote calibration to file")
+        print("\n📬 Configuration saved!")
 
 
 if __name__ == "__main__":
