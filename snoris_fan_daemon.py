@@ -22,7 +22,7 @@ def highestRelativeTemp(config) -> int:
         relative_temp = current_temp - sensor["baseline"]
         if relative_temp > highest:
             highest = relative_temp
-    return highest
+    return highest / 1000 # temps are in millidegrees
 
 def main():
     print(f"Snoris Fan Controller Daemon v{version} 💤")
@@ -70,11 +70,9 @@ def main():
             if highest_relative_temp < step_map[0][0]:
                 new_setting = 0
             else:
-                i = 0
-                while new_setting is None:
-                    if highest_relative_temp > step_map[i][0]:
-                        new_setting = step_map[i][1]
-                    i += 1
+                for step in step_map:
+                    if highest_relative_temp > step[0]:
+                        new_setting = step[1]
 
             # TODO: should also check fan RPM to make sure they are reaching targets and not dead
             if current_setting is None or new_setting != current_setting:
