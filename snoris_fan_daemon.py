@@ -76,7 +76,7 @@ def main():
                     i += 1
 
             # TODO: should also check fan RPM to make sure they are reaching targets and not dead
-            if new_setting != current_setting:
+            if current_setting is None != current_setting:
                 current_setting = new_setting
                 print(f"🌡️ Temperature at {highest_relative_temp}. Changing fans to setting {current_setting} (remember, -1 = max speed)")
                 for fan in config["fan_calibration"]:
