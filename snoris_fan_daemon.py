@@ -64,7 +64,7 @@ def main():
     current_setting = None
     while True:
         try:
-            time.sleep(5)
+            time.sleep(1)
             new_setting = None
             highest_relative_temp = highestRelativeTemp(config)
             if highest_relative_temp < step_map[0][0]:
@@ -77,7 +77,7 @@ def main():
             # TODO: should also check fan RPM to make sure they are reaching targets and not dead
             if current_setting is None or new_setting != current_setting:
                 current_setting = new_setting
-                print(f"🌡️ Temperature at {highest_relative_temp}. Changing fans to setting {current_setting} (remember, -1 = max speed)")
+                print(f"🌡️ Temperature is {highest_relative_temp} above baseline. Changing fans to setting {current_setting} (remember, -1 = max speed)")
                 for fan in config["fan_calibration"]:
                     pwm_to_set = fan["pwm_to_rpm"][current_setting]["pwm"]
                     writeInline(fan["pwm_path"], pwm_to_set)
