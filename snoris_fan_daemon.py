@@ -13,7 +13,7 @@ def readInline(path: str) -> str:
 
 def writeInline(path: str, content: str) -> None:
     with open(path, "w") as f:
-        f.write(content)
+        f.write(str(content))
 
 def highestRelativeTemp(config) -> int:
     highest = 0

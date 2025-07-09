@@ -28,7 +28,7 @@ def readInline(path: str) -> str:
 
 def writeInline(path: str, content: str) -> None:
     with open(path, "w") as f:
-        f.write(content)
+        f.write(str(content))
 
 
 def pwm_rpm_tuple(pwm, rpm):
