@@ -100,7 +100,7 @@ def main():
     hottest_temp = max(list(map(lambda it: it["baseline"], temp_sensors)))
     print(f"\nYour highest baseline temperature was {hottest_temp}°C")
     value = round(int(input(
-        "How many degrees may the temperature *increase* before Snoris sets fans to their maximum speed? [30]") or 20))
+        "How many degrees may the temperature *increase* before Snoris sets fans to their maximum speed? [30]") or 30))
     print(f"OK. For example, fans will be highest when this component reaches {hottest_temp + value}°C")
     user_options["degrees_til_max_fan"] = value
 
