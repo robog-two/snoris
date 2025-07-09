@@ -84,7 +84,7 @@ def main():
                     pwm_to_set = fan["pwm_to_rpm"][current_setting]["pwm"]
                     writeInline(fan["pwm_path"], pwm_to_set)
         except Exception as e:
-            traceback.format_exc()
+            print(traceback.format_exc())
             print("This may result in an overheat!")
 
 
