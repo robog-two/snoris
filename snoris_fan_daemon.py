@@ -67,7 +67,7 @@ def main():
             time.sleep(1)
             new_setting = None
             highest_relative_temp = highestRelativeTemp(config)
-            if highest_relative_temp < step_map[0][0]:
+            if highest_relative_temp <= step_map[0][0]:
                 new_setting = 0
             else:
                 for step in step_map:
