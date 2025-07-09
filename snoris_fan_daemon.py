@@ -18,11 +18,11 @@ def writeInline(path: str, content: str) -> None:
 def highestRelativeTemp(config) -> int:
     highest = 0
     for sensor in config["temp_sensors"]:
-        current_temp = int(readInline(sensor["path"]))
+        current_temp = int(readInline(sensor["path"])) / 1000 # temps are in millidegrees
         relative_temp = current_temp - sensor["baseline"]
         if relative_temp > highest:
             highest = relative_temp
-    return highest / 1000 # temps are in millidegrees
+    return highest
 
 def main():
     print(f"Snoris Fan Controller Daemon v{version} 💤")
