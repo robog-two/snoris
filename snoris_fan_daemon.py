@@ -1,5 +1,6 @@
 import json
 import time
+import traceback
 from math import degrees, floor
 
 version = 1.0
@@ -63,6 +64,7 @@ def main():
     current_setting = None
     while True:
         try:
+            time.sleep(5)
             new_setting = None
             highest_relative_temp = highestRelativeTemp()
             if highest_relative_temp < step_map[0][0]:
@@ -81,9 +83,8 @@ def main():
                 for fan in config["fan_calibration"]:
                     pwm_to_set = fan["pwm_to_rpm"][current_setting]["pwm"]
                     writeInline(fan["pwm_path"], pwm_to_set)
-            time.sleep(5)
         except Exception as e:
-            print("Couldn't update fan speeds due to error:", e)
+            traceback.format_exc()
             print("This may result in an overheat!")
 
 
