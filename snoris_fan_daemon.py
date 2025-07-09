@@ -5,8 +5,6 @@ from math import degrees, floor
 
 version = 1.0
 
-config = None
-
 def readInline(path: str) -> str:
     content = ""
     with open(path, "r") as f:
@@ -17,7 +15,7 @@ def writeInline(path: str, content: str) -> None:
     with open(path, "w") as f:
         f.write(content)
 
-def highestRelativeTemp() -> int:
+def highestRelativeTemp(config) -> int:
     highest = 0
     for sensor in config["temp_sensors"]:
         current_temp = int(readInline(sensor["path"]))
@@ -28,6 +26,8 @@ def highestRelativeTemp() -> int:
 
 def main():
     print(f"Snoris Fan Controller Daemon v{version} 💤")
+
+    config = None
 
     with open("/etc/snoris/config.json", "r") as config_file:
         config = json.load(config_file)
@@ -66,7 +66,7 @@ def main():
         try:
             time.sleep(5)
             new_setting = None
-            highest_relative_temp = highestRelativeTemp()
+            highest_relative_temp = highestRelativeTemp(config)
             if highest_relative_temp < step_map[0][0]:
                 new_setting = 0
             else:
