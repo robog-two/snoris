@@ -5,7 +5,7 @@ Description=The snoris fan controller daemon. Turns fans on when the computer ge
 Type=simple
 ExitType=main
 Environment="SNORIS_CONFIG_PATH=/etc/snoris/config.json"
-ExecStart=/usr/bin/python3 /etc/snoris/snoris.py
+ExecStart=/usr/bin/python3 -u /etc/snoris/snoris.py
 
 [Install]
 WantedBy=multi-user.target
