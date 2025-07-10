@@ -1,4 +1,5 @@
 import json
+import os
 import time
 import traceback
 from math import degrees, floor
@@ -29,7 +30,10 @@ def main():
 
     config = None
 
-    with open("/etc/snoris/config.json", "r") as config_file:
+    config_path = os.getenv("SNORIS_CONFIG_PATH")
+    print(f"Loading config from {config_path} (envvar SNORIS_CONFIG_PATH)")
+
+    with open(config_path, "r") as config_file:
         config = json.load(config_file)
 
     if config is None:

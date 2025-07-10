@@ -1,0 +1,11 @@
+[Unit]
+Description=The snoris fan controller daemon. Turns fans on when the computer gets hot.
+
+[Service]
+Type=simple
+ExitType=main
+Environment="SNORIS_CONFIG_PATH=/etc/snoris/config.json"
+ExecStart=/usr/bin/python3 /etc/snoris/snoris.py
+
+[Install]
+WantedBy=multi-user.target

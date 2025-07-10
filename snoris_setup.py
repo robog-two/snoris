@@ -200,6 +200,13 @@ def main():
         }, calibration_file, indent=4)
         print("\n📬 Configuration saved!")
 
+    if user_options["install_automatically"]:
+        writeInline("/etc/snoris/snoris.py", readInline("./snoris.py"))
+        writeInline("/etc/systemd/system/snoris.service", readInline("./snoris.service"))
+        if os.system("systemctl enable snoris.service --now") != 0:
+            raise OSError("Failed to enable and start snoris.service!")
+        print("🤖 System service installed and started.")
+
 
 if __name__ == "__main__":
     main()
