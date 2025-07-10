@@ -104,13 +104,6 @@ def main():
     print(f"OK. For example, fans will be highest when this component reaches {hottest_temp + value}°C")
     user_options["degrees_til_max_fan"] = value
 
-    print("\nMost components have a critical temperature of ~100°C, but you should "
-          "check your device or processor manufacturer's website.")
-    value = round(int(input(
-        "When should your system power down during a cooling failure? [85]") or 85))
-    print(f"OK. System will power down at {value}°C.")
-    user_options["degrees_power_down"] = value
-
     user_options["install_automatically"] = True
     if (input("\nDo you want Snoris to setup its system services automatically (works best for most users)? [Y/n]")
             .lower()
