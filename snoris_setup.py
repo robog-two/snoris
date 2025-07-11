@@ -183,8 +183,10 @@ def main():
 
     if len(fan_calibration) == 0:
         print("⛔️ Aborting setup. No fans calibrated successfully. Snoris will not do anything on your system.")
+        exit(1)
     if len(temp_sensors) == 0:
         print("⛔️ Aborting setup. No temperature sensors were found. Snoris will not do anything on your system.")
+        exit(1)
 
     save_path = "./config.json"
     if user_options["install_automatically"]:
