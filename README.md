@@ -1,5 +1,12 @@
-# SNORIS
-## The simple fan controller.
+![Code written by hand badge](https://robog.net/badges/byhand.svg)
+
+[Code written by hand](https://robog.net/docs/generative-ai-usage/)
+
+<br/>
+
+Snoris is a simple fan controller.
+
+[https://robog.net/blog/i-wrote-a-fan-controller/](https://robog.net/blog/i-wrote-a-fan-controller/)
 
 Clone this repository on your server.
 Run `sudo python3 snoris_setup.py`.
